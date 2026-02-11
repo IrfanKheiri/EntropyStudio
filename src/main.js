@@ -650,10 +650,21 @@ function renderDashboard() {
 
   const showRunResult = gameState.run.status === "won" || gameState.run.status === "failed";
   const statusClass = statusBannerKindClass(uiState.banner.kind);
+  const runStatus = stateStatusLabel(gameState.run.status);
+  const isMobileView = window.matchMedia("(max-width: 767px)").matches;
 
   const html = `
     <main class="app-shell">
-      <section class="resource-bar">
+      <header class="dashboard-header">
+        <div class="dashboard-header-copy">
+          <div class="header-kicker">Entropy: The Studio Simulation</div>
+          <h1 class="header-title">Week ${gameState.run.week} Command Deck</h1>
+          <div class="header-subtitle">${runStatus}</div>
+        </div>
+        <div class="header-status-chip">${uiState.banner.message}</div>
+      </header>
+
+      <section class="resource-bar" aria-label="Run metrics">
         <div class="metric">
           <div class="label">Cash</div>
           <div class="value">${formatCurrency(gameState.resources.cash)}</div>
@@ -679,8 +690,8 @@ function renderDashboard() {
       <section class="status-banner ${statusClass}">${uiState.banner.message}</section>
 
       <section class="dashboard-grid">
-        <aside class="panel">
-          <div class="panel-title">Weekly Planning</div>
+        <aside class="panel planning-panel">
+          <h2 class="panel-title">Weekly Planning</h2>
 
           <div class="planning-grid">
             <div class="control-row">
@@ -727,8 +738,10 @@ function renderDashboard() {
               <div class="small">${releaseAvailable ? "Guardrails met" : "Release locked until guardrails are met"}</div>
             </div>
 
-            <div class="control-row">
-              <div class="small">Capacity: ${cpTotal} CP · Allocated: ${cpUsed} · Unallocated: ${cpUnallocated}</div>
+            <div class="capacity-strip" role="status" aria-live="polite">
+              <span>Capacity ${cpTotal} CP</span>
+              <span>Allocated ${cpUsed}</span>
+              <span>Unallocated ${cpUnallocated}</span>
             </div>
 
             ${[
@@ -747,7 +760,7 @@ function renderDashboard() {
               )
               .join("")}
 
-            <div class="action-bar">
+            <div class="action-bar action-bar-primary">
               <button class="btn primary" id="advance-week-btn" ${canAdvance && !showRunResult ? "" : "disabled"}>Advance Week</button>
               <button class="btn" id="new-run-btn">New Run</button>
             </div>
@@ -756,7 +769,7 @@ function renderDashboard() {
 
         <section class="main-stack">
           <section class="panel burndown-wrap">
-            <div class="panel-title">Burndown and Forecast</div>
+            <h2 class="panel-title">Burndown and Forecast</h2>
             ${renderBurndownSvg(gameState)}
             <div class="chart-state-note">${getBurndownStateNote(gameState)}</div>
             <div class="legend">
@@ -778,7 +791,7 @@ function renderDashboard() {
           </section>
 
           <section class="panel preview-panel">
-            <div class="panel-title">Weekly Preview</div>
+            <h2 class="panel-title">Weekly Preview</h2>
             <div class="preview-grid">
               <div class="preview-item"><span>Completion Δ</span><span class="${getDeltaClass(preview.projected.completionDelta)}">${formatSigned(preview.projected.completionDelta, 1)}</span></div>
               <div class="preview-item"><span>Tech Debt Δ</span><span class="${getDeltaClass(preview.projected.debtDelta)}">${formatSigned(preview.projected.debtDelta, 2)}</span></div>
@@ -790,43 +803,45 @@ function renderDashboard() {
           </section>
 
           <section class="panel howto-panel">
-            <div class="panel-title">How the Run Works</div>
-            <div class="howto-scroll" role="region" aria-label="How to play quick guide" tabindex="0">
-              <p><strong>Simulation:</strong> You run a product team balancing delivery speed, quality, morale, and market traction while scope and events keep changing.</p>
-              <p><strong>Weekly flow:</strong> plan your allocations and cards, click <em>Advance Week</em>, then review deltas and events before planning the next turn.</p>
-              <p><strong>Key Terms:</strong> <strong>CP (Capacity Points)</strong> is weekly work energy allocated across Feature, Refactor, Marketing, and QA. <strong>FP (Feature Points)</strong> is the unit of scope and progress used in completion and burndown velocity.</p>
-              <p><strong>Weekly Preview:</strong> these deltas are next-week projections from your current plan before random friction and build outcomes resolve.</p>
-              <ul class="howto-list">
-                <li><strong>Completion Δ</strong> is expected scope delivered in FP (Feature Points); higher is better.</li>
-                <li><strong>Tech Debt Δ</strong> is expected debt change; lower or negative is better.</li>
-                <li><strong>Bugs Δ</strong> is expected backlog change; lower or negative is better.</li>
-                <li><strong>Quality Δ</strong> is expected quality movement; higher is better.</li>
-                <li><strong>Morale Δ</strong> is expected team sentiment change; higher supports future capacity.</li>
-                <li><strong>Hype Δ</strong> is expected market expectation change; higher helps reach but can outpace product strength.</li>
-              </ul>
-              <p><strong>How Entropy Works:</strong> Entropy Index = 0.7 * Tech Debt + min(30, 0.8 * Bug Backlog).</p>
-              <ul class="howto-list">
-                <li><strong>Green (&lt; 20)</strong> means low operational drag.</li>
-                <li><strong>Amber (20-40)</strong> means rising friction and schedule risk.</li>
-                <li><strong>Red (&gt; 40)</strong> means critical instability pressure.</li>
-              </ul>
-              <p><strong>Control entropy:</strong> allocate Capacity Points (CP) to <em>Refactor</em> to reduce tech debt and <em>QA</em> to reduce bug backlog. Heavy <em>Feature</em> focus with weak QA pushes entropy upward.</p>
-              <ul class="howto-list">
-                <li><strong>Feature</strong> pushes completion fastest, but can raise tech debt and bugs if overused.</li>
-                <li><strong>Refactor</strong> lowers entropy and future risk, but slows short-term progress.</li>
-                <li><strong>Marketing</strong> raises hype and launch upside, but does not stabilize the build.</li>
-                <li><strong>QA</strong> cuts bug backlog and protects quality before release.</li>
-              </ul>
-              <p><strong>Play effectively:</strong> keep entropy out of red, avoid long crunch streaks, and rebalance each week instead of tunneling on one lane.</p>
-              <p><strong>Release timing:</strong> ship when guardrails are met and quality is stable; too early tanks outcomes, too late burns runway.</p>
-            </div>
+            <details class="howto-details" ${isMobileView ? "open" : ""}>
+              <summary class="panel-title howto-summary">How the Run Works</summary>
+              <div class="howto-scroll" role="region" aria-label="How to play quick guide" tabindex="0">
+                <p><strong>Simulation:</strong> You run a product team balancing delivery speed, quality, morale, and market traction while scope and events keep changing.</p>
+                <p><strong>Weekly flow:</strong> plan your allocations and cards, click <em>Advance Week</em>, then review deltas and events before planning the next turn.</p>
+                <p><strong>Key Terms:</strong> <strong>CP (Capacity Points)</strong> is weekly work energy allocated across Feature, Refactor, Marketing, and QA. <strong>FP (Feature Points)</strong> is the unit of scope and progress used in completion and burndown velocity.</p>
+                <p><strong>Weekly Preview:</strong> these deltas are next-week projections from your current plan before random friction and build outcomes resolve.</p>
+                <ul class="howto-list">
+                  <li><strong>Completion Δ</strong> is expected scope delivered in FP (Feature Points); higher is better.</li>
+                  <li><strong>Tech Debt Δ</strong> is expected debt change; lower or negative is better.</li>
+                  <li><strong>Bugs Δ</strong> is expected backlog change; lower or negative is better.</li>
+                  <li><strong>Quality Δ</strong> is expected quality movement; higher is better.</li>
+                  <li><strong>Morale Δ</strong> is expected team sentiment change; higher supports future capacity.</li>
+                  <li><strong>Hype Δ</strong> is expected market expectation change; higher helps reach but can outpace product strength.</li>
+                </ul>
+                <p><strong>How Entropy Works:</strong> Entropy Index = 0.7 * Tech Debt + min(30, 0.8 * Bug Backlog).</p>
+                <ul class="howto-list">
+                  <li><strong>Green (&lt; 20)</strong> means low operational drag.</li>
+                  <li><strong>Amber (20-40)</strong> means rising friction and schedule risk.</li>
+                  <li><strong>Red (&gt; 40)</strong> means critical instability pressure.</li>
+                </ul>
+                <p><strong>Control entropy:</strong> allocate Capacity Points (CP) to <em>Refactor</em> to reduce tech debt and <em>QA</em> to reduce bug backlog. Heavy <em>Feature</em> focus with weak QA pushes entropy upward.</p>
+                <ul class="howto-list">
+                  <li><strong>Feature</strong> pushes completion fastest, but can raise tech debt and bugs if overused.</li>
+                  <li><strong>Refactor</strong> lowers entropy and future risk, but slows short-term progress.</li>
+                  <li><strong>Marketing</strong> raises hype and launch upside, but does not stabilize the build.</li>
+                  <li><strong>QA</strong> cuts bug backlog and protects quality before release.</li>
+                </ul>
+                <p><strong>Play effectively:</strong> keep entropy out of red, avoid long crunch streaks, and rebalance each week instead of tunneling on one lane.</p>
+                <p><strong>Release timing:</strong> ship when guardrails are met and quality is stable; too early tanks outcomes, too late burns runway.</p>
+              </div>
+            </details>
           </section>
 
           ${renderWeekModal()}
         </section>
 
-        <aside class="panel">
-          <div class="panel-title">Entropy and Event Feed</div>
+        <aside class="panel insight-panel">
+          <h2 class="panel-title">Entropy and Event Feed</h2>
 
           <div class="control-row">
             <label>Entropy Index ${entropyIdx.toFixed(1)}</label>
@@ -853,7 +868,7 @@ function renderDashboard() {
           </div>
 
           <section class="planning-subpanel right-save-panel">
-            <div class="subpanel-title">Save and Run Controls</div>
+            <h3 class="subpanel-title">Save and Run Controls</h3>
             <div class="action-bar action-bar-tight">
               <button class="btn" id="save-autosave-btn">Save Auto</button>
               <button class="btn" id="load-autosave-btn">Load Auto</button>
