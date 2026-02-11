@@ -29,6 +29,7 @@ const appRoot = document.querySelector("#app");
 const uiState = {
   lastSnapshot: null,
   showWeekModal: false,
+  activeCommandTab: "forecast",
   banner: {
     kind: "info",
     message: "Simulation ready.",
@@ -138,6 +139,42 @@ function statusBannerKindClass(kind) {
   }
 
   return "status-info";
+}
+
+function getCommandTabTarget(tabKey) {
+  if (tabKey === "forecast") {
+    return document.querySelector("#deck-forecast");
+  }
+
+  if (tabKey === "preview") {
+    return document.querySelector("#deck-preview");
+  }
+
+  if (tabKey === "review") {
+    return document.querySelector("#deck-review") ?? document.querySelector("#deck-preview");
+  }
+
+  if (tabKey === "manual") {
+    return document.querySelector("#deck-manual");
+  }
+
+  return document.querySelector("#deck-forecast");
+}
+
+function setActiveCommandTab(tabKey) {
+  const allowed = new Set(["forecast", "preview", "review", "manual"]);
+  const nextTab = allowed.has(tabKey) ? tabKey : "forecast";
+  uiState.activeCommandTab = nextTab;
+
+  document.querySelectorAll("[data-command-tab]").forEach((tabButton) => {
+    const isActive = tabButton.getAttribute("data-command-tab") === nextTab;
+    tabButton.classList.toggle("command-tab-active", isActive);
+    if (isActive) {
+      tabButton.setAttribute("aria-current", "page");
+    } else {
+      tabButton.removeAttribute("aria-current");
+    }
+  });
 }
 
 function clampAllocInput(value) {
@@ -549,12 +586,25 @@ function renderEventFeed(state) {
     return `<div class="small">No activity recorded yet.</div>`;
   }
 
+  const eventTypeClassMap = {
+    system: "event-item--system",
+    event: "event-item--event",
+    milestone: "event-item--milestone",
+    launch: "event-item--launch",
+    warning: "event-item--warning",
+    success: "event-item--success",
+    failure: "event-item--failure",
+  };
+
   return logs
     .slice(0, 30)
     .map(
       (entry) => `
-      <article class="event-item">
-        <div class="meta">Week ${entry.week} · ${entry.type}</div>
+      <article class="event-item ${eventTypeClassMap[entry.type] ?? "event-item--neutral"}">
+        <div class="meta">
+          <span class="event-week">W${entry.week}</span>
+          <span class="event-type">${entry.type}</span>
+        </div>
         <div class="msg">${entry.message}</div>
       </article>
     `,
@@ -562,16 +612,28 @@ function renderEventFeed(state) {
     .join("");
 }
 
-function renderWeekModal() {
-  if (!uiState.showWeekModal || !uiState.lastSnapshot) {
-    return "";
+function renderReviewPanel() {
+  const hasReview = uiState.showWeekModal && uiState.lastSnapshot;
+
+  if (!hasReview) {
+    return `
+      <section id="deck-review" class="panel review-panel review-panel-empty">
+        <h2 class="panel-title">Week Review</h2>
+        <div class="review-panel-empty-copy">
+          Resolve a week to populate review metrics.
+        </div>
+      </section>
+    `;
   }
 
   const snap = uiState.lastSnapshot;
 
   return `
-    <section class="week-modal" aria-live="polite">
-      <h3>Week ${snap.week} Review</h3>
+    <section id="deck-review" class="panel review-panel" aria-live="polite">
+      <div class="review-panel-head">
+        <h2 class="panel-title">Week ${snap.week} Review</h2>
+        <button class="btn" id="dismiss-week-modal">Dismiss</button>
+      </div>
       <div class="week-grid">
         <div class="week-cell">
           <div>Build: <strong>${snap.build.result}</strong></div>
@@ -593,9 +655,6 @@ function renderWeekModal() {
           <div>Launch: <strong>${snap.release.executed ? snap.release.outcome : "No"}</strong></div>
           <div>Sales: <strong>${formatCurrency(snap.sales.weekSales)}</strong></div>
         </div>
-      </div>
-      <div class="action-bar">
-        <button class="btn" id="dismiss-week-modal">Dismiss</button>
       </div>
     </section>
   `;
@@ -689,6 +748,45 @@ function renderDashboard() {
 
       <section class="status-banner ${statusClass}">${uiState.banner.message}</section>
 
+      <nav class="command-tabs" aria-label="Deck views">
+        <button
+          type="button"
+          class="command-tab ${uiState.activeCommandTab === "forecast" ? "command-tab-active" : ""}"
+          data-command-tab="forecast"
+          data-tab-target="deck-forecast"
+          ${uiState.activeCommandTab === "forecast" ? 'aria-current="page"' : ""}
+        >
+          Forecast
+        </button>
+        <button
+          type="button"
+          class="command-tab ${uiState.activeCommandTab === "preview" ? "command-tab-active" : ""}"
+          data-command-tab="preview"
+          data-tab-target="deck-preview"
+          ${uiState.activeCommandTab === "preview" ? 'aria-current="page"' : ""}
+        >
+          Preview
+        </button>
+        <button
+          type="button"
+          class="command-tab ${uiState.activeCommandTab === "review" ? "command-tab-active" : ""}"
+          data-command-tab="review"
+          data-tab-target="deck-review"
+          ${uiState.activeCommandTab === "review" ? 'aria-current="page"' : ""}
+        >
+          Review
+        </button>
+        <button
+          type="button"
+          class="command-tab ${uiState.activeCommandTab === "manual" ? "command-tab-active" : ""}"
+          data-command-tab="manual"
+          data-tab-target="deck-manual"
+          ${uiState.activeCommandTab === "manual" ? 'aria-current="page"' : ""}
+        >
+          Manual
+        </button>
+      </nav>
+
       <section class="dashboard-grid">
         <aside class="panel planning-panel">
           <h2 class="panel-title">Weekly Planning</h2>
@@ -768,7 +866,7 @@ function renderDashboard() {
         </aside>
 
         <section class="main-stack">
-          <section class="panel burndown-wrap">
+          <section id="deck-forecast" class="panel burndown-wrap">
             <h2 class="panel-title">Burndown and Forecast</h2>
             ${renderBurndownSvg(gameState)}
             <div class="chart-state-note">${getBurndownStateNote(gameState)}</div>
@@ -790,19 +888,23 @@ function renderDashboard() {
             </div>
           </section>
 
-          <section class="panel preview-panel">
-            <h2 class="panel-title">Weekly Preview</h2>
-            <div class="preview-grid">
-              <div class="preview-item"><span>Completion Δ</span><span class="${getDeltaClass(preview.projected.completionDelta)}">${formatSigned(preview.projected.completionDelta, 1)}</span></div>
-              <div class="preview-item"><span>Tech Debt Δ</span><span class="${getDeltaClass(preview.projected.debtDelta)}">${formatSigned(preview.projected.debtDelta, 2)}</span></div>
-              <div class="preview-item"><span>Bugs Δ</span><span class="${getDeltaClass(preview.projected.bugDelta)}">${formatSigned(preview.projected.bugDelta, 0)}</span></div>
-              <div class="preview-item"><span>Quality Δ</span><span class="${getDeltaClass(preview.projected.qualityDelta)}">${formatSigned(preview.projected.qualityDelta, 1)}</span></div>
-              <div class="preview-item"><span>Morale Δ</span><span class="${getDeltaClass(preview.projected.moraleDelta)}">${formatSigned(preview.projected.moraleDelta, 1)}</span></div>
-              <div class="preview-item"><span>Hype Δ</span><span class="${getDeltaClass(preview.projected.hypeDelta)}">${formatSigned(preview.projected.hypeDelta, 0)}</span></div>
-            </div>
+          <section class="preview-review-row">
+            <section id="deck-preview" class="panel preview-panel">
+              <h2 class="panel-title">Weekly Preview</h2>
+              <div class="preview-grid">
+                <div class="preview-item"><span>Completion Δ</span><span class="${getDeltaClass(preview.projected.completionDelta)}">${formatSigned(preview.projected.completionDelta, 1)}</span></div>
+                <div class="preview-item"><span>Tech Debt Δ</span><span class="${getDeltaClass(preview.projected.debtDelta)}">${formatSigned(preview.projected.debtDelta, 2)}</span></div>
+                <div class="preview-item"><span>Bugs Δ</span><span class="${getDeltaClass(preview.projected.bugDelta)}">${formatSigned(preview.projected.bugDelta, 0)}</span></div>
+                <div class="preview-item"><span>Quality Δ</span><span class="${getDeltaClass(preview.projected.qualityDelta)}">${formatSigned(preview.projected.qualityDelta, 1)}</span></div>
+                <div class="preview-item"><span>Morale Δ</span><span class="${getDeltaClass(preview.projected.moraleDelta)}">${formatSigned(preview.projected.moraleDelta, 1)}</span></div>
+                <div class="preview-item"><span>Hype Δ</span><span class="${getDeltaClass(preview.projected.hypeDelta)}">${formatSigned(preview.projected.hypeDelta, 0)}</span></div>
+              </div>
+            </section>
+
+            ${renderReviewPanel()}
           </section>
 
-          <section class="panel howto-panel">
+          <section id="deck-manual" class="panel howto-panel">
             <details class="howto-details" ${isMobileView ? "open" : ""}>
               <summary class="panel-title howto-summary">How the Run Works</summary>
               <div class="howto-scroll" role="region" aria-label="How to play quick guide" tabindex="0">
@@ -837,7 +939,6 @@ function renderDashboard() {
             </details>
           </section>
 
-          ${renderWeekModal()}
         </section>
 
         <aside class="panel insight-panel">
@@ -1090,10 +1191,29 @@ function bindActionEvents() {
   });
 }
 
+function bindCommandTabEvents() {
+  document.querySelectorAll("[data-command-tab]").forEach((tabButton) => {
+    tabButton.addEventListener("click", () => {
+      const tabKey = tabButton.getAttribute("data-command-tab") ?? "forecast";
+      const tabTarget = getCommandTabTarget(tabKey);
+
+      setActiveCommandTab(tabKey);
+
+      if (tabTarget) {
+        tabTarget.scrollIntoView({
+          behavior: "smooth",
+          block: "start",
+        });
+      }
+    });
+  });
+}
+
 function render() {
   renderDashboard();
   bindPlanningEvents();
   bindActionEvents();
+  bindCommandTabEvents();
 }
 
 function initializeGame() {
