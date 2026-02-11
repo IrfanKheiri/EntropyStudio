@@ -1,0 +1,11 @@
+{
+  "name": "entropy-studio-sim-web-mvp",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "serve": "py -m http.server 8080",
+    "test": "node test/sim/determinism.smoke.test.mjs"
+  }
+}
+
